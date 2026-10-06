@@ -9,8 +9,8 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="theme-color" content="#f5f3ff">
 <title>Fuel Receipt Diary</title>
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⛽</text></svg>">
-<link id="touchIcon" rel="apple-touch-icon" href="">
+<link rel="icon" type="image/png" href="apple-touch-icon.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
@@ -568,17 +568,6 @@ async function exportXlsx() {
 /* ------------------------------------------------------------------ */
 /* Init                                                                 */
 /* ------------------------------------------------------------------ */
-(function homeScreenIcon() {
-  try {
-    const c = document.createElement('canvas'); c.width = c.height = 180;
-    const x = c.getContext('2d');
-    const g = x.createLinearGradient(0, 0, 180, 180); g.addColorStop(0, '#fecdd3'); g.addColorStop(1, '#c4b5fd');
-    x.fillStyle = g; x.fillRect(0, 0, 180, 180);
-    x.font = '110px serif'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText('⛽', 90, 98);
-    $('touchIcon').href = c.toDataURL('image/png');
-  } catch (e) {}
-})();
-
 (async function init() {
   show('add');
   try {

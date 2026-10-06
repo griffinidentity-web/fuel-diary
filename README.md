@@ -29,7 +29,7 @@
 ## การติดตั้ง (GitHub Pages)
 
 1. สร้าง repository แบบ **Public** บน [github.com](https://github.com) (เช่นชื่อ `fuel-diary`)
-2. อัปโหลดไฟล์ `index.html` (ใช้ชื่อนี้เพื่อให้ลิงก์สั้น) แล้วกด **Commit changes**
+2. อัปโหลดไฟล์ **`index.html` และ `apple-touch-icon.png`** (ไอคอนแอป) พร้อมกัน แล้วกด **Commit changes**
 3. ไปที่ **Settings → Pages** → Branch: `main`, โฟลเดอร์ `/ (root)` → **Save**
 4. รอ 1–2 นาที จะได้ลิงก์ `https://<ชื่อผู้ใช้>.github.io/fuel-diary/`
 
@@ -79,4 +79,6 @@
 | ไฟล์ | หน้าที่ |
 |---|---|
 | `index.html` | แอปหลัก (อัปโหลดไฟล์นี้ขึ้น GitHub Pages) |
+| `apple-touch-icon.png` | ไอคอนแอปบนหน้าจอหลัก (อัปโหลดคู่กับ index.html) |
+| `make_icon.py` | สคริปต์สร้างไอคอน (ไม่ต้องอัปโหลด) |
 | `app.py` | เวอร์ชัน Flask + SQLite รุ่นแรก (ไม่ได้ใช้แล้ว) |
