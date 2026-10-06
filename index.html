@@ -1,0 +1,595 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Fuel Diary">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="theme-color" content="#f5f3ff">
+<title>Fuel Receipt Diary</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⛽</text></svg>">
+<link id="touchIcon" rel="apple-touch-icon" href="">
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  html { -webkit-text-size-adjust: 100%; }
+  body { font-family: 'Nunito', system-ui, sans-serif; -webkit-tap-highlight-color: transparent;
+         padding-top: env(safe-area-inset-top); }
+  .card { background: rgba(255,255,255,.8); border-radius: 1.4rem; box-shadow: 0 6px 20px rgba(167,139,250,.15); }
+  .inp { width:100%; border-radius:1rem; border:2px solid #e9e5ff; background:#fff; padding:.65rem .8rem;
+         font-size:16px; outline:none; min-height:46px; }          /* 16px stops iOS zoom-on-focus */
+  .inp:focus { border-color:#c4b5fd; box-shadow:0 0 0 3px #ede9fe; }
+  .btn { border-radius:9999px; font-weight:800; padding:.8rem 1.4rem; font-size:16px; min-height:48px;
+         transition:transform .12s; }
+  .btn:active { transform:scale(.96); }
+  .tab { flex:1; padding:.5rem 0 .4rem; font-size:11px; font-weight:800; color:#94a3b8; }
+  .tab .ic { font-size:22px; display:block; line-height:1.2; }
+  .tab.on { color:#8b5cf6; }
+  .tab.on .ic { transform: scale(1.15); }
+  nav { padding-bottom: env(safe-area-inset-bottom); }
+  @keyframes bob { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-5px)} }
+  .bob { animation: bob 2.4s ease-in-out infinite; display:inline-block; }
+</style>
+</head>
+<body class="min-h-screen bg-gradient-to-br from-rose-50 via-sky-50 to-violet-100 text-slate-700">
+
+<div class="max-w-xl mx-auto px-4 pt-4 pb-32">
+
+  <header class="text-center mb-3">
+    <div class="text-4xl bob">⛽</div>
+    <h1 class="text-2xl font-extrabold text-violet-500">Fuel Receipt Diary</h1>
+  </header>
+
+  <button id="backupBanner" onclick="show('backup')"
+          class="hidden w-full mb-3 bg-amber-100 text-amber-800 rounded-2xl px-4 py-2 text-sm font-bold text-left"></button>
+
+  <!-- ADD -->
+  <section id="tab-add" class="space-y-4">
+    <div class="card p-4">
+      <h2 class="font-extrabold text-sky-500 mb-2">🧾 Paste receipt text</h2>
+      <textarea id="raw" rows="5" class="inp font-mono !text-sm" placeholder="Paste the text copied from LINE here..."></textarea>
+      <div class="flex gap-2 mt-3">
+        <button onclick="readReceipt()" class="btn bg-sky-200 text-sky-800 flex-1">✨ Read Receipt</button>
+        <button onclick="resetForm()" class="btn bg-slate-100 text-slate-600">🧹</button>
+      </div>
+      <div id="warn" class="mt-3 space-y-1"></div>
+    </div>
+
+    <div class="card p-4">
+      <h2 id="formTitle" class="font-extrabold text-emerald-500 mb-3">📝 Details</h2>
+      <div id="formMain" class="grid grid-cols-2 gap-3"></div>
+      <details class="mt-3">
+        <summary class="font-bold text-slate-500 py-2">➕ More details</summary>
+        <div id="formMore" class="grid grid-cols-2 gap-3 mt-2"></div>
+      </details>
+      <div class="flex gap-2 mt-4">
+        <button onclick="save()" class="btn bg-emerald-200 text-emerald-800 flex-1">💾 Save</button>
+        <button id="cancelEdit" onclick="resetForm()" class="btn bg-rose-100 text-rose-700 hidden">✖ Cancel</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- HISTORY -->
+  <section id="tab-history" class="hidden space-y-3">
+    <div class="card p-3 flex items-center gap-3">
+      <select id="hmonth" onchange="renderHistory()" class="inp flex-1"></select>
+      <div id="hsum" class="text-right text-sm font-bold text-violet-500 whitespace-nowrap"></div>
+    </div>
+    <div id="hlist" class="space-y-3"></div>
+    <p id="hempty" class="text-center text-slate-400 py-10 hidden">No fuel logs yet 🐣</p>
+  </section>
+
+  <!-- REPORT -->
+  <section id="tab-report" class="hidden space-y-3">
+    <div class="card p-4">
+      <h2 class="font-extrabold text-rose-400 mb-2">📊 Monthly summary</h2>
+      <input id="rmonth" type="month" class="inp" onchange="renderReport()">
+    </div>
+    <div id="rstats" class="grid grid-cols-2 gap-3"></div>
+    <div class="card p-3 overflow-x-auto">
+      <table class="w-full text-sm whitespace-nowrap">
+        <thead><tr class="text-left text-slate-500 bg-violet-50">
+          <th class="p-2 rounded-l-xl">Date</th><th class="p-2">Station</th>
+          <th class="p-2 text-right">Litres</th><th class="p-2 text-right rounded-r-xl">Amount</th></tr></thead>
+        <tbody id="rrows"></tbody>
+      </table>
+      <p id="rempty" class="text-center text-slate-400 py-6 hidden">No receipts this month 🐣</p>
+    </div>
+    <button onclick="exportXlsx()" class="btn bg-amber-200 text-amber-900 w-full">📗 Export Excel for Accounts</button>
+  </section>
+
+  <!-- BACKUP -->
+  <section id="tab-backup" class="hidden space-y-3">
+    <div class="card p-4 space-y-3">
+      <h2 class="font-extrabold text-violet-500">💾 Backup &amp; Restore</h2>
+      <div id="bstatus" class="text-sm"></div>
+      <button onclick="backup()" class="btn bg-violet-200 text-violet-800 w-full">📤 Backup (save / share file)</button>
+      <p class="text-xs text-slate-500">Tap Backup, then choose <b>Save to Files</b> (iCloud Drive) or AirDrop it to your iPad.</p>
+    </div>
+    <div class="card p-4 space-y-3">
+      <h3 class="font-extrabold text-sky-500">📥 Restore / merge</h3>
+      <p class="text-sm text-slate-500">Choose a backup file. Entries are <b>merged</b> into what is already on this device (nothing is overwritten unless the backup has a newer edit of the same entry), so you can load several backups one after another.</p>
+      <label class="btn bg-sky-200 text-sky-800 w-full block text-center cursor-pointer">
+        📂 Choose backup file
+        <input id="restoreFile" type="file" accept=".json,application/json" class="hidden" onchange="restore(this)">
+      </label>
+    </div>
+    <div id="storageNote" class="text-xs text-slate-400 text-center"></div>
+  </section>
+</div>
+
+<!-- bottom nav -->
+<nav class="fixed bottom-0 inset-x-0 bg-white/90 backdrop-blur border-t border-violet-100 z-20">
+  <div class="max-w-xl mx-auto flex">
+    <button class="tab" data-t="add" onclick="show('add')"><span class="ic">➕</span>Add</button>
+    <button class="tab" data-t="history" onclick="show('history')"><span class="ic">📒</span>History</button>
+    <button class="tab" data-t="report" onclick="show('report')"><span class="ic">📊</span>Report</button>
+    <button class="tab" data-t="backup" onclick="show('backup')"><span class="ic">💾</span>Backup</button>
+  </div>
+</nav>
+
+<div id="toast" class="fixed left-1/2 -translate-x-1/2 bottom-24 bg-slate-700 text-white rounded-full px-5 py-2 text-sm font-bold opacity-0 pointer-events-none transition-opacity z-30"></div>
+
+<script>
+/* ------------------------------------------------------------------ */
+/* Receipt parser (tolerant of OCR noise such as "๕ 74.69")            */
+/* Only the amount BEFORE discount is recorded; discount is ignored.   */
+/* ------------------------------------------------------------------ */
+// PARSER-START
+function parseReceipt(text) {
+  text = text.replace(/\r/g, '');
+  const res = {receipt_dt:null, brand:null, location:null, postcode:null, station_no:null, fuel_type:null,
+               pump:null, litres:null, price_per_litre:null, total:null, payment:null,
+               terminal_id:null, receipt_no:null, transaction_no:null};
+  const warnings = [];
+  const num = s => s == null ? null : parseFloat(String(s).replace(',', '.'));
+  let m;
+
+  // Date / time (prefer the one after "Date/time")
+  const dt = '(\\d{1,2})[-/.](\\d{1,2})[-/.](\\d{4}|\\d{2})\\s+(\\d{1,2}):(\\d{2})';
+  m = text.match(new RegExp('Date\\s*/?\\s*time\\W*' + dt, 'i')) || text.match(new RegExp(dt));
+  if (m) {
+    let [, d, mo, y, h, mi] = m;
+    y = y.length === 2 ? 2000 + +y : +y;
+    const dd = new Date(y, +mo - 1, +d, +h, +mi);
+    if (dd.getMonth() === +mo - 1 && dd.getDate() === +d) {
+      const p = n => String(n).padStart(2, '0');
+      res.receipt_dt = `${y}-${p(mo)}-${p(d)}T${p(h)}:${p(mi)}`;
+    } else warnings.push('Date looks invalid - please check it.');
+  }
+
+  // Station
+  m = text.match(/Stat\s*No\.?\W*(\d+)/i);
+  if (m) {
+    res.station_no = m[1];
+    const before = text.slice(0, m.index).split('\n').map(s => s.trim()).filter(Boolean);
+    if (before.length) res.location = before[before.length - 1];
+  }
+  m = text.match(/\b([A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2})\b/);
+  if (m) res.postcode = m[1];
+  for (const b of ['Shell','BP','Esso','Texaco','Tesco',"Sainsbury's",'Asda','Morrisons','Gulf','Jet','Murco','Applegreen','Costco']) {
+    if (new RegExp('\\b' + b.replace(/'/g, "'") + '\\b', 'i').test(text)) { res.brand = b; break; }
+  }
+
+  // Fuel type
+  const fuel = text.match(/\*?\s*((?:FS\s+)?(?:Super\s+|Premium\s+|Regular\s+)?(?:Unleaded|Diesel|E10|E5)[A-Za-z0-9 \-]*)/i);
+  let fuelEnd = 0;
+  if (fuel) { res.fuel_type = fuel[1].trim(); fuelEnd = fuel.index + fuel[0].length; }
+
+  // Pump, litres, price per litre
+  m = text.match(/PUMP\s*(\d+)\s*[:;.,]?\s*(\d+[.,]\d{1,2})/i);
+  if (m) { res.pump = m[1]; res.litres = num(m[2]); }
+  else { m = text.match(/(\d+\.\d{2})\s*\S?\s*[*x×]/); if (m) res.litres = num(m[1]); }
+  m = text.match(/(?:^|[^\d.])(\d\.\d{3})(?!\d)/);
+  if (m) res.price_per_litre = num(m[1]);
+  else { m = text.match(/(\d{2,3}\.\d)\s*p\b/i); if (m) res.price_per_litre = Math.round(num(m[1]) * 10) / 1000; }
+
+  // Money: amount before discount (gross). Discount only used for sanity checks.
+  const tm = text.match(/TOTAL[^\d\n]{0,8}(\d+[.,]\d{2})/i);
+  const paid = tm ? num(tm[1]) : null;
+  const seg = text.slice(fuelEnd, tm ? tm.index : undefined);
+  const dm = seg.match(/(\d+\.\d{2})\s*off\b/i);
+  const discount = dm ? num(dm[1]) : 0;
+  const segClean = seg.replace(/[^\n]*PUMP[^\n]*/gi, '').replace(/[^\n]*\boff\b[^\n]*/gi, '');
+  m = segClean.match(/(?:^|[^\d.])(\d{1,4}\.\d{2})(?!\d)/);
+  let gross = m ? num(m[1]) : null;
+  if (gross == null && res.litres && res.price_per_litre) {
+    gross = Math.round(res.litres * res.price_per_litre * 100) / 100;
+    warnings.push('Amount was calculated from litres x price.');
+  }
+  if (gross == null && paid != null) gross = Math.round((paid + discount) * 100) / 100;
+  res.total = gross;
+
+  // Payment & ids
+  m = text.match(/\b(Amex|Visa|Mastercard|Maestro|Debit|Credit|Cash|Apple\s*Pay|Google\s*Pay)\b/i);
+  if (m) res.payment = /^amex$/i.test(m[1]) ? 'Amex' : m[1].replace(/\b\w/g, c => c.toUpperCase());
+  m = text.match(/Terminal\s*ID\W*(\d+)/i);    if (m) res.terminal_id = m[1];
+  m = text.match(/Receipt\s*no\W*(\d+)/i);     if (m) res.receipt_no = m[1];
+  m = text.match(/Transaction\s*no\W*(\d+)/i); if (m) res.transaction_no = m[1];
+
+  // Sanity checks
+  if (res.litres && res.price_per_litre && gross && Math.abs(res.litres * res.price_per_litre - gross) > 0.10)
+    warnings.push('Litres x price does not match the amount - OCR may have misread a number.');
+  if (gross != null && paid != null && Math.abs(gross - discount - paid) > 0.02)
+    warnings.push('Amount - discount does not match the total paid - please check.');
+  const names = {receipt_dt:'date/time', litres:'litres', price_per_litre:'price per litre', total:'amount'};
+  for (const k in names) if (res[k] == null) warnings.push('Could not read: ' + names[k]);
+  return {fields: res, warnings};
+}
+// PARSER-END
+
+/* ------------------------------------------------------------------ */
+/* Helpers                                                              */
+/* ------------------------------------------------------------------ */
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const gbp = (v, d = 2) => v == null || v === '' ? '–' : '£' + Number(v).toLocaleString('en-GB', {minimumFractionDigits: d, maximumFractionDigits: d});
+const nf = (v, d = 2) => v == null || v === '' ? '–' : Number(v).toLocaleString('en-GB', {minimumFractionDigits: d, maximumFractionDigits: d});
+const uuid = () => (crypto.randomUUID ? crypto.randomUUID() : 'id-' + Date.now() + '-' + Math.random().toString(16).slice(2));
+const LPG = 4.54609; // litres per UK gallon
+const fmtDate = s => s ? new Date(s).toLocaleString('en-GB', {day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit'}) : '–';
+const monthLabel = m => new Date(m + '-01T00:00').toLocaleDateString('en-GB', {month:'long', year:'numeric'});
+function toast(msg) {
+  const t = $('toast'); t.textContent = msg; t.style.opacity = 1;
+  clearTimeout(toast._t); toast._t = setTimeout(() => t.style.opacity = 0, 2200);
+}
+
+/* ------------------------------------------------------------------ */
+/* IndexedDB (data lives on this device)                                */
+/* ------------------------------------------------------------------ */
+let _db;
+const rq = r => new Promise((res, rej) => { r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); });
+const store = (n, mode = 'readonly') => _db.transaction(n, mode).objectStore(n);
+const dbAll = () => rq(store('logs').getAll());
+const dbPut = rec => rq(store('logs', 'readwrite').put(rec));
+const metaGet = k => rq(store('meta').get(k));
+const metaSet = (k, v) => rq(store('meta', 'readwrite').put(v, k));
+function openDB() {
+  return new Promise((res, rej) => {
+    const r = indexedDB.open('fuel-diary', 1);
+    r.onupgradeneeded = () => { r.result.createObjectStore('logs', {keyPath: 'id'}); r.result.createObjectStore('meta'); };
+    r.onsuccess = () => res(r.result);
+    r.onerror = () => rej(r.error);
+  });
+}
+
+/* ------------------------------------------------------------------ */
+/* State & trip calculations                                            */
+/* ------------------------------------------------------------------ */
+let rawAll = [], live = [], editingId = null, lastBackup = null;
+
+function computeTrips(rows) {
+  let prev = null;
+  rows.forEach(r => {
+    r.trip_miles = r.mpg = r.cost_per_mile = null;
+    if (r.odometer != null) {
+      if (prev && r.odometer > prev.odometer && r.litres) {
+        const trip = r.odometer - prev.odometer;
+        r.trip_miles = Math.round(trip * 10) / 10;
+        r.mpg = Math.round(trip / (r.litres / LPG) * 10) / 10;
+        if (r.total) r.cost_per_mile = r.total / trip;
+      }
+      prev = r;
+    }
+  });
+}
+
+async function load() {
+  rawAll = await dbAll();
+  live = rawAll.filter(r => !r.deleted)
+               .sort((a, b) => (a.receipt_dt || '').localeCompare(b.receipt_dt || '') || (a.updated_at || '').localeCompare(b.updated_at || ''));
+  computeTrips(live);
+  lastBackup = await metaGet('lastBackup');
+  renderAll();
+}
+
+function summarize(rows) {
+  const s = {count: rows.length, amount: 0, litres: 0, miles: null, mpg: null, perMile: null, avgPrice: null};
+  s.amount = rows.reduce((a, r) => a + (r.total || 0), 0);
+  s.litres = rows.reduce((a, r) => a + (r.litres || 0), 0);
+  if (s.litres) s.avgPrice = s.amount / s.litres;
+  const trips = rows.filter(r => r.trip_miles);
+  if (trips.length) {
+    const miles = trips.reduce((a, r) => a + r.trip_miles, 0);
+    const lit = trips.reduce((a, r) => a + r.litres, 0);
+    const amt = trips.reduce((a, r) => a + (r.total || 0), 0);
+    s.miles = miles; s.mpg = miles / (lit / LPG); s.perMile = amt / miles;
+  }
+  return s;
+}
+
+/* ------------------------------------------------------------------ */
+/* Navigation                                                           */
+/* ------------------------------------------------------------------ */
+function show(t) {
+  ['add', 'history', 'report', 'backup'].forEach(n => $('tab-' + n).classList.toggle('hidden', n !== t));
+  document.querySelectorAll('.tab').forEach(b => b.classList.toggle('on', b.dataset.t === t));
+  window.scrollTo({top: 0});
+}
+
+/* ------------------------------------------------------------------ */
+/* Add / edit form                                                      */
+/* ------------------------------------------------------------------ */
+const MAIN = [
+  ['receipt_dt', 'Date & time', 'datetime-local', '📅', 'col-span-2'],
+  ['total', 'Amount (£)', 'number', '💰'],
+  ['litres', 'Litres', 'number', '💧'],
+  ['price_per_litre', 'Price £/litre', 'number', '💷'],
+  ['odometer', 'Odometer (miles)', 'number', '🚗'],
+  ['fuel_type', 'Fuel type', 'text', '⛽'],
+  ['brand', 'Brand', 'text', '🏷️'],
+  ['location', 'Location', 'text', '📍', 'col-span-2'],
+];
+const MORE = [
+  ['postcode', 'Postcode', 'text', '📮'],
+  ['station_no', 'Station No', 'text', '🔢'],
+  ['pump', 'Pump', 'text', '🔌'],
+  ['payment', 'Payment', 'text', '💳'],
+  ['terminal_id', 'Terminal ID', 'text', '🖨️'],
+  ['receipt_no', 'Receipt No', 'text', '🧾'],
+  ['transaction_no', 'Transaction No', 'text', '🔖'],
+  ['note', 'Note', 'text', '💬', 'col-span-2'],
+];
+const ALL = [...MAIN, ...MORE];
+const NUMERIC = new Set(['total', 'litres', 'price_per_litre', 'odometer']);
+const fieldHtml = ([k, label, type, icon, span = '']) => `
+  <label class="block ${span} ${k === 'odometer' ? 'ring-2 ring-pink-200 rounded-2xl p-2 bg-pink-50' : ''}">
+    <span class="text-xs font-bold text-slate-500">${icon} ${label}</span>
+    <input id="f_${k}" type="${type}" ${type === 'number' ? 'step="any" inputmode="decimal"' : ''} class="inp mt-1">
+    ${k === 'odometer' ? '<span id="odoHint" class="text-xs text-pink-500"></span>' : ''}
+  </label>`;
+$('formMain').innerHTML = MAIN.map(fieldHtml).join('');
+$('formMore').innerHTML = MORE.map(fieldHtml).join('');
+
+function readReceipt() {
+  const text = $('raw').value;
+  if (!text.trim()) { $('warn').innerHTML = '<div class="text-rose-500 text-sm">⚠️ Please paste the receipt text first.</div>'; return; }
+  const {fields, warnings} = parseReceipt(text);
+  ALL.forEach(([k]) => { if (k !== 'odometer' && k !== 'note') $('f_' + k).value = fields[k] ?? ''; });
+  $('warn').innerHTML = warnings.length
+    ? warnings.map(w => `<div class="bg-amber-100 text-amber-800 rounded-xl px-3 py-1 text-sm">⚠️ ${esc(w)}</div>`).join('')
+    : '<div class="bg-emerald-100 text-emerald-800 rounded-xl px-3 py-1 text-sm">✅ Looks good! Add your odometer and save.</div>';
+  $('f_odometer').focus();
+}
+
+function resetForm() {
+  ALL.forEach(([k]) => $('f_' + k).value = '');
+  $('raw').value = ''; $('warn').innerHTML = '';
+  editingId = null; $('cancelEdit').classList.add('hidden');
+  $('formTitle').textContent = '📝 Details';
+}
+
+async function save() {
+  const rec = editingId ? {...rawAll.find(r => r.id === editingId)} : {id: uuid(), created_at: new Date().toISOString()};
+  ALL.forEach(([k]) => {
+    const v = $('f_' + k).value.trim();
+    rec[k] = NUMERIC.has(k) ? (v === '' || isNaN(+v) ? null : +v) : (v || null);
+  });
+  if (!rec.receipt_dt || rec.total == null) { toast('Please fill in Date & time and Amount'); return; }
+  if ($('raw').value.trim()) rec.raw_text = $('raw').value;
+  rec.updated_at = new Date().toISOString();
+  rec.deleted = false;
+  try { await dbPut(rec); } catch (e) { alert('Could not save: ' + e); return; }
+  resetForm(); await load(); show('history'); toast('Saved ✅');
+}
+
+function edit(id) {
+  const r = rawAll.find(x => x.id === id); if (!r) return;
+  ALL.forEach(([k]) => $('f_' + k).value = r[k] ?? '');
+  $('raw').value = r.raw_text ?? '';
+  editingId = id; $('cancelEdit').classList.remove('hidden');
+  $('formTitle').textContent = '✏️ Editing entry';
+  show('add');
+}
+
+async function del(id) {
+  if (!confirm('Delete this entry?')) return;
+  const r = rawAll.find(x => x.id === id);
+  // keep a tombstone so a later restore/merge does not bring it back
+  await dbPut({id, deleted: true, updated_at: new Date().toISOString(), receipt_dt: r.receipt_dt});
+  await load(); toast('Deleted');
+}
+
+/* ------------------------------------------------------------------ */
+/* Render                                                               */
+/* ------------------------------------------------------------------ */
+function monthsOf(rows) { return [...new Set(rows.filter(r => r.receipt_dt).map(r => r.receipt_dt.slice(0, 7)))].sort().reverse(); }
+
+function renderAll() {
+  renderHistory(); renderReport(); renderBackup();
+  const last = [...live].reverse().find(r => r.odometer != null);
+  $('odoHint').textContent = last ? `Last: ${nf(last.odometer, 0)} mi` : '';
+}
+
+function renderHistory() {
+  const months = monthsOf(live), sel = $('hmonth'), cur = sel.value;
+  sel.innerHTML = '<option value="">All months</option>' + months.map(m => `<option value="${m}">${monthLabel(m)}</option>`).join('');
+  sel.value = months.includes(cur) ? cur : '';
+  const rows = live.filter(r => !sel.value || (r.receipt_dt || '').startsWith(sel.value)).reverse();
+  const s = summarize(rows);
+  $('hsum').innerHTML = `${gbp(s.amount)}<br><span class="text-xs font-normal text-slate-400">${s.count} fill-up${s.count === 1 ? '' : 's'}</span>`;
+  $('hempty').classList.toggle('hidden', rows.length > 0);
+  $('hlist').innerHTML = rows.map(r => `
+    <div class="card p-3" data-id="${esc(r.id)}">
+      <div class="flex justify-between items-start gap-2" data-act="edit">
+        <div class="min-w-0">
+          <div class="font-extrabold">${esc(fmtDate(r.receipt_dt))}</div>
+          <div class="text-sm text-slate-500 truncate">${esc([r.brand, r.location].filter(Boolean).join(' · ') || '—')}</div>
+          <div class="text-sm mt-1">💧 ${nf(r.litres)} L · ${esc(r.fuel_type || '')} · £${nf(r.price_per_litre, 3)}/L</div>
+        </div>
+        <div class="text-right shrink-0">
+          <div class="text-xl font-extrabold text-violet-500">${gbp(r.total)}</div>
+          <div class="text-xs text-slate-500">🚗 ${r.odometer == null ? '–' : nf(r.odometer, 0) + ' mi'}</div>
+        </div>
+      </div>
+      <div class="flex justify-between items-center mt-2 pt-2 border-t border-violet-100 text-xs text-slate-500">
+        <span>${r.trip_miles ? `Trip ${nf(r.trip_miles, 0)} mi · ${nf(r.mpg, 1)} MPG · ${gbp(r.cost_per_mile, 3)}/mi` : 'No trip data yet'}</span>
+        <span><button data-act="edit" class="px-3 py-1">✏️</button><button data-act="del" class="px-3 py-1">🗑️</button></span>
+      </div>
+    </div>`).join('');
+}
+$('hlist').addEventListener('click', e => {
+  const card = e.target.closest('[data-id]'); const act = e.target.closest('[data-act]');
+  if (!card || !act) return;
+  const id = card.dataset.id;
+  act.dataset.act === 'del' ? del(id) : edit(id);
+});
+
+function statCard(icon, label, value, color) {
+  return `<div class="card p-3 text-center ${color}"><div class="text-2xl">${icon}</div>
+    <div class="text-xl font-extrabold">${value}</div><div class="text-xs text-slate-500">${label}</div></div>`;
+}
+
+function reportRows() {
+  const m = $('rmonth').value;
+  return live.filter(r => (r.receipt_dt || '').startsWith(m));
+}
+
+function renderReport() {
+  if (!$('rmonth').value) $('rmonth').value = new Date().toISOString().slice(0, 7);
+  const rows = reportRows(), s = summarize(rows);
+  $('rstats').innerHTML =
+    statCard('💰', 'Total amount', gbp(s.amount), '!bg-rose-100/80') +
+    statCard('🧾', 'Receipts', s.count, '!bg-sky-100/80') +
+    statCard('💧', 'Litres', nf(s.litres), '!bg-amber-100/80') +
+    statCard('🚗', 'Miles driven', s.miles == null ? '–' : nf(s.miles, 0), '!bg-emerald-100/80') +
+    statCard('🏷️', 'Avg £/litre', gbp(s.avgPrice, 3), '!bg-violet-100/80') +
+    statCard('🪙', '£ per mile', gbp(s.perMile, 3), '!bg-pink-100/80');
+  $('rempty').classList.toggle('hidden', rows.length > 0);
+  $('rrows').innerHTML = rows.map(r => `<tr class="border-b border-violet-100">
+    <td class="p-2">${esc((r.receipt_dt || '').slice(8, 10) + '/' + (r.receipt_dt || '').slice(5, 7))}</td>
+    <td class="p-2">${esc(r.brand || r.location || '–')}</td>
+    <td class="p-2 text-right">${nf(r.litres)}</td><td class="p-2 text-right font-bold">${gbp(r.total)}</td></tr>`).join('');
+}
+
+function renderBackup() {
+  const changed = rawAll.filter(r => !lastBackup || (r.updated_at || '') > lastBackup).length;
+  const days = lastBackup ? Math.floor((Date.now() - new Date(lastBackup)) / 864e5) : null;
+  $('bstatus').innerHTML = `
+    <div>📦 Entries on this device: <b>${live.length}</b></div>
+    <div>🕒 Last backup: <b>${lastBackup ? new Date(lastBackup).toLocaleString('en-GB') + ` (${days} day${days === 1 ? '' : 's'} ago)` : 'never'}</b></div>
+    <div>✏️ Changes since last backup: <b>${changed}</b></div>`;
+  const banner = $('backupBanner');
+  const stale = live.length > 0 && (days == null || days >= 7);
+  banner.classList.toggle('hidden', !stale);
+  banner.textContent = days == null ? '💾 You have not backed up yet - tap here' : `💾 Last backup was ${days} days ago - tap to back up`;
+}
+
+/* ------------------------------------------------------------------ */
+/* Files: share sheet (iOS) or download                                 */
+/* ------------------------------------------------------------------ */
+async function deliver(blob, name) {
+  const file = new File([blob], name, {type: blob.type});
+  if (navigator.canShare && navigator.canShare({files: [file]})) {
+    try { await navigator.share({files: [file], title: name}); return true; }
+    catch (e) { if (e.name === 'AbortError') return false; }
+  }
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = name;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+  return true;
+}
+
+async function backup() {
+  const payload = {app: 'fuel-diary', version: 1, exported_at: new Date().toISOString(), records: rawAll};
+  const blob = new Blob([JSON.stringify(payload)], {type: 'application/json'});
+  const ok = await deliver(blob, `fuel-backup-${new Date().toISOString().slice(0, 10)}.json`);
+  if (ok) { await metaSet('lastBackup', new Date().toISOString()); await load(); toast('Backup done ✅'); }
+}
+
+async function restore(input) {
+  const file = input.files[0]; input.value = '';
+  if (!file) return;
+  try {
+    const data = JSON.parse(await file.text());
+    const recs = Array.isArray(data) ? data : data.records;
+    if (!Array.isArray(recs)) throw new Error('not a Fuel Diary backup');
+    const local = new Map(rawAll.map(r => [r.id, r]));
+    let added = 0, updated = 0, same = 0;
+    for (const r of recs) {
+      if (!r || typeof r.id !== 'string') continue;
+      const cur = local.get(r.id);
+      if (!cur) { await dbPut(r); added++; }
+      else if ((r.updated_at || '') > (cur.updated_at || '')) { await dbPut(r); updated++; }
+      else same++;
+    }
+    await load();
+    toast(`Merged: ${added} new, ${updated} updated, ${same} unchanged`);
+  } catch (e) { alert('Could not read that file: ' + e.message); }
+}
+
+/* ------------------------------------------------------------------ */
+/* Excel export for accounts                                            */
+/* ------------------------------------------------------------------ */
+async function exportXlsx() {
+  if (typeof XLSX === 'undefined') { alert('Excel library did not load - please connect to the internet and reload.'); return; }
+  const m = $('rmonth').value, rows = reportRows(), s = summarize(rows);
+  if (!rows.length) { toast('No receipts in this month'); return; }
+  const dmy = r => r.receipt_dt.slice(8, 10) + '/' + r.receipt_dt.slice(5, 7) + '/' + r.receipt_dt.slice(0, 4);
+  const head = ['Date', 'Time', 'Brand', 'Location', 'Postcode', 'Fuel Type', 'Pump', 'Litres', 'Price (£/L)', 'Amount (£)',
+                'Payment', 'Receipt No', 'Transaction No', 'Odometer (miles)', 'Trip Miles', 'MPG (UK)', 'Note'];
+  const body = rows.map(r => [dmy(r), r.receipt_dt.slice(11, 16), r.brand || '', r.location || '', r.postcode || '', r.fuel_type || '',
+    r.pump || '', r.litres, r.price_per_litre, r.total, r.payment || '', r.receipt_no || '', r.transaction_no || '',
+    r.odometer, r.trip_miles, r.mpg, r.note || '']);
+  const totalRow = ['TOTAL', '', '', '', '', '', '', +s.litres.toFixed(2), '', +s.amount.toFixed(2), '', '', '', '', s.miles == null ? '' : +s.miles.toFixed(1), '', ''];
+  const ws = XLSX.utils.aoa_to_sheet([head, ...body, totalRow]);
+  ws['!cols'] = [12, 7, 10, 24, 10, 14, 6, 9, 10, 12, 9, 11, 14, 14, 10, 9, 22].map(w => ({wch: w}));
+  const fmts = {7: '0.00', 8: '"£"0.000', 9: '"£"#,##0.00', 13: '#,##0', 14: '#,##0.0', 15: '0.0'};
+  for (let R = 1; R <= body.length + 1; R++)
+    for (const c in fmts) { const cell = ws[XLSX.utils.encode_cell({r: R, c: +c})]; if (cell && typeof cell.v === 'number') cell.z = fmts[c]; }
+
+  const sum = [
+    ['Fuel Expense Summary'], [],
+    ['Month', monthLabel(m)],
+    ['Number of receipts', s.count],
+    ['Total litres', +s.litres.toFixed(2)],
+    ['Total amount (£, before discount)', +s.amount.toFixed(2)],
+    ['Average price (£/litre)', s.avgPrice == null ? '' : +s.avgPrice.toFixed(3)],
+    ['Miles driven', s.miles == null ? '' : +s.miles.toFixed(1)],
+    ['Average MPG (UK)', s.mpg == null ? '' : +s.mpg.toFixed(1)],
+    ['Cost per mile (£)', s.perMile == null ? '' : +s.perMile.toFixed(3)],
+    [], ['Generated', new Date().toLocaleString('en-GB')],
+  ];
+  const ws2 = XLSX.utils.aoa_to_sheet(sum);
+  ws2['!cols'] = [{wch: 34}, {wch: 20}];
+  if (ws2.B6) ws2.B6.z = '"£"#,##0.00';
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws2, 'Summary');
+  XLSX.utils.book_append_sheet(wb, ws, 'Receipts');
+  const out = XLSX.write(wb, {bookType: 'xlsx', type: 'array'});
+  const blob = new Blob([out], {type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+  await deliver(blob, `Fuel-Expenses-${m}.xlsx`);
+}
+
+/* ------------------------------------------------------------------ */
+/* Init                                                                 */
+/* ------------------------------------------------------------------ */
+(function homeScreenIcon() {
+  try {
+    const c = document.createElement('canvas'); c.width = c.height = 180;
+    const x = c.getContext('2d');
+    const g = x.createLinearGradient(0, 0, 180, 180); g.addColorStop(0, '#fecdd3'); g.addColorStop(1, '#c4b5fd');
+    x.fillStyle = g; x.fillRect(0, 0, 180, 180);
+    x.font = '110px serif'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText('⛽', 90, 98);
+    $('touchIcon').href = c.toDataURL('image/png');
+  } catch (e) {}
+})();
+
+(async function init() {
+  show('add');
+  try {
+    _db = await openDB();
+    if (navigator.storage && navigator.storage.persist) navigator.storage.persist();
+    await load();
+  } catch (e) {
+    $('storageNote').textContent = '⚠️ Could not open on-device storage (private browsing?): ' + e;
+    alert('Storage is unavailable in this browser mode, so entries cannot be saved. Please open in normal (non-private) Safari.');
+  }
+})();
+</script>
+</body>
+</html>
